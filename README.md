@@ -101,5 +101,30 @@ docker exec -it nutanix ip netns exec ns102 ping -c 3 10.10.10.201
 docker exec -it firewall-a ip netns exec ns10 ping -c 3 10.10.10.102
 docker exec -it firewall-b ip netns exec ns10 ping -c 3 10.10.10.101
 
-### 6) Tear down
+### 6) Test with disabled MAC learning
+#### disable mac learning on both switches by loggin in and executing the commands below:
+docker exec -it leaf-switch-1 sr_cli
+enter candidate
+set / network-instance l2_cliente1 bridge-table mac-learning admin-state disable
+set / network-instance l2_cliente2 bridge-table mac-learning admin-state disable
+commit now
+#### clear mac tables for both services
+tools network-instance l2_cliente1 bridge-table mac-learning delete-all-macs
+tools network-instance l2_cliente2 bridge-table mac-learning delete-all-macs
+
+#### do the same for leaf-switch-2
+docker exec -it leaf-switch-2 sr_cli
+enter candidate
+set / network-instance l2_cliente1 bridge-table mac-learning admin-state disable
+set / network-instance l2_cliente2 bridge-table mac-learning admin-state disable
+commit now
+#### clear mac tables for both services
+tools network-instance l2_cliente1 bridge-table mac-learning delete-all-macs
+tools network-instance l2_cliente2 bridge-table mac-learning delete-all-macs
+
+#### rerun the tests in section 5 again to confirm the results hold and confirm no mac-entries
+show network-instance l2_cliente1 bridge-table mac-table all
+show network-instance l2_cliente2 bridge-table mac-table all
+
+### 7) Tear down
 containerlab destroy --topo lab_vlan_switching_evpn.clab.yml
