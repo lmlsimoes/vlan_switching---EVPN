@@ -67,7 +67,7 @@ Even though **VLAN 10 is reused** on two different firewall-facing ports, the tr
 
 containerlab deploy --topo lab_vlan_switching_evpn.clab.yml
 
-### 1) Inspect the lab
+### 2) Inspect the lab
 
 containerlab inspect --topo lab_vlan_switching_evpn.clab.yml
 
@@ -80,24 +80,24 @@ docker exec -it firewall-a ip netns list
 docker exec -it firewall-b ip netns list
 
 ### 4) Verification (expected behavior)
-# should succeed
+#### should succeed
 docker exec -it nutanix ip netns exec ns101 ping -c 3 10.10.10.101
 docker exec -it nutanix ip netns exec ns102 ping -c 3 10.10.10.102
 
 ### 5) Reachability that SHOULD NOT work
-# From nutanix:
-# ns101 should NOT reach firewall-b and ns102 should NOT reach firewall-a
-# should fail
+#### From nutanix:
+#### ns101 should NOT reach firewall-b and ns102 should NOT reach firewall-a
+#### should fail
 docker exec -it nutanix ip netns exec ns101 ping -c 3 10.10.10.102
 docker exec -it nutanix ip netns exec ns102 ping -c 3 10.10.10.101
 
-# ns101 should NOT reach ns102 (they are in different VLANs/services)
-# should fail
+#### ns101 should NOT reach ns102 (they are in different VLANs/services)
+#### should fail
 docker exec -it nutanix ip netns exec ns101 ping -c 3 10.10.10.202
 docker exec -it nutanix ip netns exec ns102 ping -c 3 10.10.10.201
 
-# ns10 in firewall-a shouldNOT reach ns10 in feirewall-b and vice versa
-# should fail
+#### ns10 in firewall-a shouldNOT reach ns10 in feirewall-b and vice versa
+#### should fail
 docker exec -it firewall-a ip netns exec ns10 ping -c 3 10.10.10.102
 docker exec -it firewall-b ip netns exec ns10 ping -c 3 10.10.10.101
 
