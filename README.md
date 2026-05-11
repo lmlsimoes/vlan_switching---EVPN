@@ -1,180 +1,106 @@
-# VLAN Local Significance & Translation Lab
+# VLAN Switching over EVPN (VLAN Local Significance & Translation) — Nokia SR Linux + containerlab
 
-This lab demonstrates VLAN local significance and VLAN translation with Nokia SR Linux using `containerlab`. It proves that even when multiple clients share the same IP subnet, SR Linux MAC-VRFs and VLAN segmentation keep traffic isolated.
+This lab demonstrates **VLAN switching across an EVPN/VXLAN fabric** using Nokia SR Linux and `containerlab`.
 
-## Lab goals
+It proves two related concepts:
 
-- Show VLAN IDs are locally significant, not globally unique.
-- Demonstrate VLAN translation between client-facing VLANs and service-facing VLANs.
-- Use MAC-VRFs on Nokia SR Linux to separate client traffic.
-- Use Linux network namespaces to simulate isolated hosts on the same subnet.
-- Prove that `client1` and `client2` cannot reach each other even with overlapping addressing.
+1) **VLAN local significance**: the same VLAN ID (e.g., VLAN 10) can be reused on different ports/services without leaking traffic, as long as the services are separated (here: **separate MAC-VRFs**).
+2) **VLAN translation across the fabric**: client VLANs on one side (101/102) can be “mapped” to a different VLAN ID on the service side (10) while still being part of the same end-to-end L2 service — using EVPN/VXLAN and MAC-VRFs.
 
-## Topology
+> In this topology:
+> - Client1: VLAN **101** (Nutanix side) → VNI **101** over EVPN → VLAN **10** (Firewall-A side)
+> - Client2: VLAN **102** (Nutanix side) → VNI **102** over EVPN → VLAN **10** (Firewall-B side)
 
-```
-           +------------------+
-           |   nutanix host   |
-           |  ns101 @ VLAN 101|--\
-           |  ns102 @ VLAN 102|   \  e1-1
-           +------------------+    \
-                                    +-----------------------+
-                                    | Nokia 7220 IXR-D3L    |
-                                    |      SR Linux         |
-                                    |       leaf_switch     |
-                                    +-----------------------+
-                                   /             \
-                                  /               \
-                    e1-5 VLAN 10 /                 \ VLAN 10 e1-6
-                                /                   \
-                    +----------------+       +----------------+
-                    | firewall_a     |       | firewall_b     |
-                    | client1 domain |       | client2 domain |
-                    +----------------+       +----------------+
-```
+[![EVPN VLAN switching lab topology](assets/lab-diagram-evpn.png)](assets/lab-diagram-evpn.png)
 
-### Mappings
+## Topology (2 Spines + 2 Leafs)
 
-- `nutanix:e1-1` carries:
-  - VLAN `101` for Client 1
-  - VLAN `102` for Client 2
-- `leaf_switch:e1-5` carries:
-  - VLAN `10` for Client 1
-- `leaf_switch:e1-6` carries:
-  - VLAN `10` for Client 2
+- **Spines** = EVPN route reflectors (overlay iBGP EVPN)
+  - `spine-switch-1` (loopback 10.0.0.11/32)
+  - `spine-switch-2` (loopback 10.0.0.12/32)
+- **Leafs** = EVPN VTEPs (VXLAN tunnel endpoints)
+  - `leaf-switch-1` (loopback 10.0.0.1/32) = service-side leaf (firewalls)
+  - `leaf-switch-2` (loopback 10.0.0.2/32) = client-side leaf (nutanix)
 
-### MAC-VRF service design
+**Links (high level):**
+- Each leaf uplinks redundantly to both spines using `e1-31` and `e1-32`.
+- `nutanix` connects to `leaf-switch-2:e1-1`
+- `firewall-a` connects to `leaf-switch-1:e1-5`
+- `firewall-b` connects to `leaf-switch-1:e1-6`
 
-- `l2_cliente_a`:
-  - `ethernet-1/1.101`
-  - `ethernet-1/5.10`
-- `l2_cliente_b`:
-  - `ethernet-1/1.102`
-  - `ethernet-1/6.10`
-
-This means VLAN `10` is reused on two different firewall-facing ports, but traffic remains separated by distinct MAC-VRFs.
-
-## Files included
-
-- `lab_vlan_switching_1_leaf.clab.yml`
-  - `containerlab` topology definition
-- `create_vlan_namespace.sh`
-  - script used by Linux nodes to create VLAN interfaces and namespaces
-- `leaf_switch.flat.txt`
-  - Nokia SR Linux startup configuration for the leaf switch
-- `README.md_old`
-  - previous README content preserved for reference
+---
 
 ## What happens in the lab
 
-### Nutanix side
+### Linux side (hosts)
+We simulate hosts using Linux containers + network namespaces:
 
-- The `nutanix` node simulates two clients using Linux namespaces:
-  - `ns101` on VLAN `101`
-  - `ns102` on VLAN `102`
-- Both namespaces use the same IPv4 subnet (`10.10.10.0/24`) and derived IPv6 addresses.
-- The `create_vlan_namespace.sh` script creates:
-  - a VLAN sub-interface
-  - a dedicated network namespace
-  - deterministic MAC address
-  - IPv4/IPv6 addresses
-  - supernet routes for validation
+- **nutanix** creates:
+  - `ns101` on VLAN 101 with an IP in `10.10.10.0/24`
+  - `ns102` on VLAN 102 with an IP in `10.10.10.0/24`
+- **firewall-a** creates:
+  - `ns10` on VLAN 10 (service VLAN) with an IP in `10.10.10.0/24`
+- **firewall-b** creates:
+  - `ns10` on VLAN 10 (service VLAN) with an IP in `10.10.10.0/24`
 
-### Firewall side
+These namespaces are created automatically via the `exec:` actions in the containerlab topology.
 
-- The `firewall_a` Linux node represents Client 1's firewall-facing service.
-- The `firewall_b` Linux node represents Client 2's firewall-facing service.
-- Each firewall node is configured with a VLAN `10` sub-interface in its namespace.
+### SR Linux side (EVPN + VLAN mapping)
+There are two MAC-VRF services:
 
-### Leaf switch side
+- `l2_cliente1`:
+  - leaf-switch-2: `ethernet-1/1.101` (client VLAN 101)
+  - leaf-switch-1: `ethernet-1/5.10` (service VLAN 10)
+  - EVPN/VXLAN: VNI 101, RTs for 101
+- `l2_cliente2`:
+  - leaf-switch-2: `ethernet-1/1.102` (client VLAN 102)
+  - leaf-switch-1: `ethernet-1/6.10` (service VLAN 10)
+  - EVPN/VXLAN: VNI 102, RTs for 102
 
-- The Nokia switch translates:
-  - VLAN `101` from the Nutanix side to VLAN `10` on `ethernet-1/5`
-  - VLAN `102` from the Nutanix side to VLAN `10` on `ethernet-1/6`
-- `MAC-VRF` instances keep the two services isolated even though the same VLAN ID is reused.
+Even though **VLAN 10 is reused** on two different firewall-facing ports, the traffic stays isolated because each VLAN 10 attachment belongs to a **different MAC-VRF**.
 
+---
 
 ## Quick start
 
-1. Deploy the topology:
-
+### 1) Deploy the lab
 ```bash
-containerlab deploy --topo lab_vlan_switching_1_leaf.clab.yml
-```
+containerlab deploy --topo lab_vlan_switching_evpn.clab.yml
 
-2. Confirm the nodes are up:
-
+### 1) Inspect the lab
 ```bash
-containerlab inspect --topo lab_vlan_switching_1_leaf.clab.yml
-```
+containerlab inspect --topo lab_vlan_switching_evpn.clab.yml
 
-3. Enter a node shell:
+### 3) Check namespaces on the Linux nodes
 
-```bash
-docker exec -it clab-lab_vlan_switching_1_leaf-nutanix bash
-```
-
-4. Verify namespaces on the `nutanix` node:
-
-```bash
+docker exec -it clab-vlan-switching-evpn-nutanix bash
 ip netns list
-```
 
-5. Run the isolation checks:
+docker exec -it clab-vlan-switching-evpn-firewall-a bash
+ip netns list
 
-```bash
+docker exec -it clab-vlan-switching-evpn-firewall-b bash
+ip netns list
+
+### 4) Verification (expected behavior)
+docker exec -it clab-vlan-switching-evpn-nutanix bash
+
 ip netns exec ns101 ping -c 3 10.10.10.101
 ip netns exec ns102 ping -c 3 10.10.10.102
-```
 
-6. Tear down the lab when done:
+### 5) Reachability that SHOULD NOT work
+From nutanix:
 
-```bash
-containerlab destroy --topo lab_vlan_switching_1_leaf.clab.yml
-```
+ns101 should NOT reach firewall-b
+ns102 should NOT reach firewall-a
+ns101 should NOT reach ns102 (they are in different VLANs/services)
 
-## Verification
+### Example
+ip netns exec ns101 ping -c 3 10.10.10.102   # should fail
+ip netns exec ns102 ping -c 3 10.10.10.101   # should fail
 
-Use the Linux node consoles or `ip netns exec` inside `nutanix`, `firewall_a`, and `firewall_b`.
+ip netns exec ns101 ping -c 3 10.10.10.202   # should fail (ns102 IP)
+ip netns exec ns102 ping -c 3 10.10.10.201   # should fail (ns101 IP)
 
-### Expected reachability
-
-From `nutanix`:
-
-- `ns101` should reach `firewall_a`
-- `ns101` should NOT reach `firewall_b`
-- `ns102` should reach `firewall_b`
-- `ns102` should NOT reach `firewall_a`
-- `ns101` should NOT reach `ns102`
-
-### Example checks
-
-On `nutanix`:
-
-```bash
-ip netns exec ns101 ping -c 3 10.10.10.101
-ip netns exec ns101 ping -c 3 10.10.10.102
-ip netns exec ns102 ping -c 3 10.10.10.102
-ip netns exec ns102 ping -c 3 10.10.10.101
-```
-
-On firewalls:
-
-```bash
-ip netns exec ns10 ip addr show
-ip netns exec ns10 ip -6 addr show
-```
-
-## Key takeaway
-
-This lab proves that:
-
-- VLANs are locally significant.
-- SR Linux can translate VLANs between different domains.
-- MAC-VRFs provide isolation even when VLAN IDs and IP subnets overlap.
-- Linux namespaces simulate isolated clients on the same physical host.
-
-## Notes
-
-- `create_vlan_namespace.sh` derives IPv6 addresses from IPv4 using `2002::/96` and generates deterministic locally administered MAC addresses.
-- The same IPv4 subnet is reused intentionally to show that traffic separation is enforced by VLAN/MAC-VRF boundaries, not by IP addressing alone.
+### 6) Tear down
+containerlab destroy --topo lab_vlan_switching_evpn.clab.yml
