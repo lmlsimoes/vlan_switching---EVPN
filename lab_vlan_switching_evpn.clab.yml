@@ -1,0 +1,85 @@
+name: vlan-switching-evpn
+prefix: ""
+
+topology:
+  kinds:
+    nokia_srlinux:
+      image: ghcr.io/nokia/srlinux:26.3.1
+      type: ixr-d3l
+    linux:
+      image: ghcr.io/srl-labs/network-multitool
+
+  nodes:
+    leaf-switch-1:
+      kind: nokia_srlinux
+      mgmt-ipv4: 172.20.20.11
+      startup-config: configs/leaf-switch-1.flat.txt
+      ports:
+        - 2211:22
+        - 57411:57400
+    leaf-switch-2:
+      kind: nokia_srlinux
+      mgmt-ipv4: 172.20.20.12
+      startup-config: configs/leaf-switch-2.flat.txt
+      ports:
+        - 2212:22
+        - 57412:57400
+    spine-switch-1:
+      kind: nokia_srlinux
+      mgmt-ipv4: 172.20.20.21
+      startup-config: configs/spine-switch-1.flat.txt
+      ports:
+        - 2221:22
+        - 57421:57400
+    spine-switch-2:
+      kind: nokia_srlinux
+      mgmt-ipv4: 172.20.20.22
+      startup-config: configs/spine-switch-2.flat.txt
+      ports:
+        - 2222:22
+        - 57422:57400
+
+    firewall-a:
+      kind: linux
+      mgmt-ipv4: 172.20.20.101
+      binds:
+        - scripts/create_vlan_namespace.sh:/tmp/create_vlan_namespace.sh
+      exec:
+        # create namespace for client1 and add routes
+        - bash /tmp/create_vlan_namespace.sh eth1 10 10.10.10.101/24
+      env:
+        PS1: '\u@\h:\w\$ '
+
+    firewall-b:
+      kind: linux
+      mgmt-ipv4: 172.20.20.102
+      binds:
+        - scripts/create_vlan_namespace.sh:/tmp/create_vlan_namespace.sh
+      exec:
+        # create namespace for client2 and add routes
+        # same IP subnet and VLAN ID is used to confirm there is isolation
+        - bash /tmp/create_vlan_namespace.sh eth1 10 10.10.10.102/24
+      env:
+        PS1: '\u@\h:\w\$ '
+
+    nutanix:
+      kind: linux
+      mgmt-ipv4: 172.20.20.103
+      binds:
+        - scripts/create_vlan_namespace.sh:/tmp/create_vlan_namespace.sh
+      exec:
+        - bash /tmp/create_vlan_namespace.sh eth1 101 10.10.10.201/24
+        - bash /tmp/create_vlan_namespace.sh eth1 102 10.10.10.202/24
+      env:
+        PS1: "\\u@\\h:\\w\\$ "
+
+  links:
+    - endpoints: [ "leaf-switch-2:e1-1", "nutanix:eth1" ]
+    - endpoints: [ "leaf-switch-1:e1-5", "firewall-a:eth1" ]
+    - endpoints: [ "leaf-switch-1:e1-6", "firewall-b:eth1" ]
+
+    - endpoints: [ "leaf-switch-1:e1-31", "spine-switch-1:e1-1" ]
+    - endpoints: [ "leaf-switch-1:e1-32", "spine-switch-2:e1-1" ]
+
+    - endpoints: [ "leaf-switch-2:e1-31", "spine-switch-1:e1-2" ]
+    - endpoints: [ "leaf-switch-2:e1-32", "spine-switch-2:e1-2" ]

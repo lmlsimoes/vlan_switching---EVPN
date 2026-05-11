@@ -1,0 +1,74 @@
+{
+  "freeTextAnnotations": [],
+  "freeShapeAnnotations": [],
+  "trafficRateAnnotations": [],
+  "groupStyleAnnotations": [],
+  "networkNodeAnnotations": [],
+  "nodeAnnotations": [
+    {
+      "id": "leaf-switch-1",
+      "interfacePattern": "e1-{n}",
+      "position": {
+        "x": 480,
+        "y": 440
+      },
+      "labelPosition": "left",
+      "icon": "leaf"
+    },
+    {
+      "id": "leaf-switch-2",
+      "interfacePattern": "e1-{n}",
+      "position": {
+        "x": 780,
+        "y": 440
+      },
+      "labelPosition": "right",
+      "icon": "leaf"
+    },
+    {
+      "id": "spine-switch-1",
+      "interfacePattern": "e1-{n}",
+      "position": {
+        "x": 540,
+        "y": 320
+      },
+      "labelPosition": "top",
+      "icon": "spine"
+    },
+    {
+      "id": "spine-switch-2",
+      "interfacePattern": "e1-{n}",
+      "position": {
+        "x": 720,
+        "y": 320
+      },
+      "labelPosition": "top",
+      "icon": "spine"
+    },
+    {
+      "id": "firewall-a",
+      "position": {
+        "x": 380,
+        "y": 560
+      }
+    },
+    {
+      "id": "firewall-b",
+      "position": {
+        "x": 580,
+        "y": 560
+      }
+    },
+    {
+      "id": "nutanix",
+      "position": {
+        "x": 780,
+        "y": 560
+      },
+      "icon": "server"
+    }
+  ],
+  "edgeAnnotations": [],
+  "aliasEndpointAnnotations": [],
+  "viewerSettings": {}
+}

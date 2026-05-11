@@ -1,0 +1,124 @@
+# configuring Inter-Switch Links with unnumbered IPV6 interfaces
+set / interface ethernet-1/31 subinterface 0 ipv6 admin-state enable
+set / interface ethernet-1/31 subinterface 0 ipv6 router-advertisement router-role admin-state enable
+set / interface ethernet-1/31 subinterface 0 ipv6 router-advertisement router-role max-advertisement-interval 10
+set / interface ethernet-1/31 subinterface 0 ipv6 router-advertisement router-role min-advertisement-interval 4
+set / interface ethernet-1/32 subinterface 0 ipv6 admin-state enable
+set / interface ethernet-1/32 subinterface 0 ipv6 router-advertisement router-role admin-state enable
+set / interface ethernet-1/32 subinterface 0 ipv6 router-advertisement router-role max-advertisement-interval 10
+set / interface ethernet-1/32 subinterface 0 ipv6 router-advertisement router-role min-advertisement-interval 4
+
+set / interface system0 admin-state enable
+set / interface system0 subinterface 0 admin-state enable
+set / interface system0 subinterface 0 ipv4 admin-state enable
+set / interface system0 subinterface 0 ipv4 address 10.0.0.1/32
+
+#configure network instance default
+set / network-instance default type default
+set / network-instance default admin-state enable
+set / network-instance default ip-forwarding receive-ipv4-check false
+set / network-instance default interface ethernet-1/31.0
+set / network-instance default interface ethernet-1/32.0
+set / network-instance default interface system0.0
+
+set / routing-policy prefix-set system-loopbacks prefix 10.0.0.0/8 mask-length-range 32..32
+set / routing-policy policy system-loopbacks-policy statement 1 match prefix prefix-set system-loopbacks
+set / routing-policy policy system-loopbacks-policy statement 1 action policy-result accept
+
+set / network-instance default protocols bgp autonomous-system 4200000001
+set / network-instance default protocols bgp router-id 10.0.0.1
+set / network-instance default protocols bgp dynamic-neighbors interface ethernet-1/31.0 peer-group underlay
+set / network-instance default protocols bgp dynamic-neighbors interface ethernet-1/31.0 allowed-peer-as [ 4200000001..4200000020 ]
+set / network-instance default protocols bgp dynamic-neighbors interface ethernet-1/32.0 peer-group underlay
+set / network-instance default protocols bgp dynamic-neighbors interface ethernet-1/32.0 allowed-peer-as [ 4200000001..4200000020 ]
+set / network-instance default protocols bgp afi-safi ipv4-unicast admin-state enable
+set / network-instance default protocols bgp group underlay export-policy [ system-loopbacks-policy ]
+set / network-instance default protocols bgp group underlay import-policy [ system-loopbacks-policy ]
+
+#configure the iBGP route reflector for EVPN - route reflector at the spines
+set / network-instance default protocols bgp group overlay peer-as 65535
+set / network-instance default protocols bgp group overlay local-as as-number 65535
+set / network-instance default protocols bgp group overlay afi-safi evpn admin-state enable
+set / network-instance default protocols bgp group overlay afi-safi ipv4-unicast admin-state disable
+set / network-instance default protocols bgp neighbor 10.0.0.11 admin-state enable
+set / network-instance default protocols bgp neighbor 10.0.0.11 peer-group overlay
+set / network-instance default protocols bgp neighbor 10.0.0.12 admin-state enable
+set / network-instance default protocols bgp neighbor 10.0.0.12 peer-group overlay
+
+# configuring the Firewall_a interface and subinterface for client1
+set / interface ethernet-1/5 admin-state enable
+set / interface ethernet-1/5 vlan-tagging true
+set / interface ethernet-1/5 subinterface 10 type bridged
+set / interface ethernet-1/5 subinterface 10 admin-state enable
+set / interface ethernet-1/5 subinterface 10 vlan encap single-tagged vlan-id 10
+
+# configuring the Firewall_b interface and subinterface for client2
+set / interface ethernet-1/6 admin-state enable
+set / interface ethernet-1/6 vlan-tagging true
+set / interface ethernet-1/6 subinterface 10 type bridged
+set / interface ethernet-1/6 subinterface 10 admin-state enable
+set / interface ethernet-1/6 subinterface 10 vlan encap single-tagged vlan-id 10
+
+
+
+# configuring the layer2 service (mac-vrf) for client1
+set / network-instance l2_cliente1 type mac-vrf
+set / network-instance l2_cliente1 admin-state enable
+set / network-instance l2_cliente1 interface ethernet-1/5.10
+# adding the EVPN control plane and VXLAN tunneling to mac-vrf l2_client1
+set / tunnel-interface vxlan1 vxlan-interface 101 type bridged
+set / tunnel-interface vxlan1 vxlan-interface 101 ingress vni 101
+set / network-instance l2_cliente1 vxlan-interface vxlan1.101
+set / network-instance l2_cliente1 protocols bgp-evpn bgp-instance 1 admin-state enable
+set / network-instance l2_cliente1 protocols bgp-evpn bgp-instance 1 vxlan-interface vxlan1.101
+set / network-instance l2_cliente1 protocols bgp-evpn bgp-instance 1 evi 101
+set / network-instance l2_cliente1 protocols bgp-evpn bgp-instance 1 ecmp 2
+set / network-instance l2_cliente1 protocols bgp-vpn bgp-instance 1 route-target export-rt target:65353:101
+set / network-instance l2_cliente1 protocols bgp-vpn bgp-instance 1 route-target import-rt target:65353:101
+
+
+
+# configuring the layer2 service (mac-vrf) for client2
+set / network-instance l2_cliente2 type mac-vrf
+set / network-instance l2_cliente2 admin-state enable
+set / network-instance l2_cliente2 interface ethernet-1/6.10
+# adding the EVPN control plane and VXLAN tunneling to mac-vrf l2_client2
+set / tunnel-interface vxlan1 vxlan-interface 102 type bridged
+set / tunnel-interface vxlan1 vxlan-interface 102 ingress vni 102
+set / network-instance l2_cliente2 vxlan-interface vxlan1.102
+set / network-instance l2_cliente2 protocols bgp-evpn bgp-instance 1 admin-state enable
+set / network-instance l2_cliente2 protocols bgp-evpn bgp-instance 1 vxlan-interface vxlan1.102
+set / network-instance l2_cliente2 protocols bgp-evpn bgp-instance 1 evi 102
+set / network-instance l2_cliente2 protocols bgp-evpn bgp-instance 1 ecmp 2
+set / network-instance l2_cliente2 protocols bgp-vpn bgp-instance 1 route-target export-rt target:65353:102
+set / network-instance l2_cliente2 protocols bgp-vpn bgp-instance 1 route-target import-rt target:65353:102
+
+
+# configure the irb interface to add an IPv4 address in the switch for client1
+set / interface irb1 admin-state enable
+set / interface irb1 subinterface 1 ipv4 admin-state enable
+set / interface irb1 subinterface 1 ipv4 address 10.10.10.154/24
+# the following is to enable arps to cross the EVPN for testing with both irbs with different IPS  (no anycast)
+set / interface irb1 subinterface 1 ipv4 arp learn-unsolicited true
+set / interface irb1 subinterface 1 ipv4 arp evpn advertise dynamic
+set / network-instance l2_cliente1 interface irb1.1
+set / network-instance l3_client1 type ip-vrf
+set / network-instance l3_client1 admin-state enable
+set / network-instance l3_client1 interface irb1.1
+
+
+# configure the irb interface to add an IPv4 address in the switch
+set / interface irb2 admin-state enable
+set / interface irb2 subinterface 1 ipv4 admin-state enable
+set / interface irb2 subinterface 1 ipv4 address 10.10.10.153/24
+# the following is to enable arps to cross the EVPN for testing with both irbs with different IPS  (no anycast)
+set / interface irb2 subinterface 1 ipv4 arp learn-unsolicited true
+set / interface irb2 subinterface 1 ipv4 arp evpn advertise dynamic
+
+set / network-instance l2_cliente2 interface irb2.1
+set / network-instance l3_client2 type ip-vrf
+set / network-instance l3_client2 admin-state enable
+set / network-instance l3_client2 interface irb2.1
+
+
+

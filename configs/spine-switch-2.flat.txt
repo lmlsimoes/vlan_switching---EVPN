@@ -1,0 +1,46 @@
+# configuring Inter-Switch Links with unnumbered IPV6 interfaces
+set / interface ethernet-1/1 subinterface 0 ipv6 admin-state enable
+set / interface ethernet-1/1 subinterface 0 ipv6 router-advertisement router-role admin-state enable
+set / interface ethernet-1/1 subinterface 0 ipv6 router-advertisement router-role max-advertisement-interval 10
+set / interface ethernet-1/1 subinterface 0 ipv6 router-advertisement router-role min-advertisement-interval 4
+set / interface ethernet-1/2 subinterface 0 ipv6 admin-state enable
+set / interface ethernet-1/2 subinterface 0 ipv6 router-advertisement router-role admin-state enable
+set / interface ethernet-1/2 subinterface 0 ipv6 router-advertisement router-role max-advertisement-interval 10
+set / interface ethernet-1/2 subinterface 0 ipv6 router-advertisement router-role min-advertisement-interval 4
+
+set / interface system0 admin-state enable
+set / interface system0 subinterface 0 admin-state enable
+set / interface system0 subinterface 0 ipv4 admin-state enable
+set / interface system0 subinterface 0 ipv4 address 10.0.0.12/32
+
+#configure network instance default
+set / network-instance default type default
+set / network-instance default admin-state enable
+set / network-instance default ip-forwarding receive-ipv4-check false
+set / network-instance default interface ethernet-1/1.0
+set / network-instance default interface ethernet-1/2.0
+set / network-instance default interface system0.0
+
+set / routing-policy prefix-set system-loopbacks prefix 10.0.0.0/8 mask-length-range 32..32
+set / routing-policy policy system-loopbacks-policy statement 1 match prefix prefix-set system-loopbacks
+set / routing-policy policy system-loopbacks-policy statement 1 action policy-result accept
+
+set / network-instance default protocols bgp autonomous-system 4200000010
+set / network-instance default protocols bgp router-id 10.0.0.12
+set / network-instance default protocols bgp dynamic-neighbors interface ethernet-1/1.0 peer-group underlay
+set / network-instance default protocols bgp dynamic-neighbors interface ethernet-1/1.0 allowed-peer-as [ 4200000001..4200000020 ]
+set / network-instance default protocols bgp dynamic-neighbors interface ethernet-1/2.0 peer-group underlay
+set / network-instance default protocols bgp dynamic-neighbors interface ethernet-1/2.0 allowed-peer-as [ 4200000001..4200000020 ]
+set / network-instance default protocols bgp afi-safi ipv4-unicast admin-state enable
+set / network-instance default protocols bgp group underlay export-policy [ system-loopbacks-policy ]
+set / network-instance default protocols bgp group underlay import-policy [ system-loopbacks-policy ]
+
+#configure the iBGP route reflector for EVPN - route reflector at the spines
+set / network-instance default protocols bgp route-reflector cluster-id 0.0.0.1
+set / network-instance default protocols bgp group overlay peer-as 65535
+set / network-instance default protocols bgp group overlay local-as as-number 65535
+set / network-instance default protocols bgp group overlay afi-safi evpn admin-state enable
+set / network-instance default protocols bgp group overlay afi-safi ipv4-unicast admin-state disable
+set / network-instance default protocols bgp group overlay route-reflector client true
+set / network-instance default protocols bgp dynamic-neighbors accept match 0.0.0.0/0 peer-group overlay
+set / network-instance default protocols bgp group overlay route-reflector cluster-id 0.0.0.1
