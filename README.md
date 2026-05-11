@@ -63,44 +63,43 @@ Even though **VLAN 10 is reused** on two different firewall-facing ports, the tr
 
 ## Quick start
 
-### 1) Deploy the lab
-```bash
+### 1) Deploy the lab "bash"
+
 containerlab deploy --topo lab_vlan_switching_evpn.clab.yml
 
 ### 1) Inspect the lab
-```bash
+
 containerlab inspect --topo lab_vlan_switching_evpn.clab.yml
 
 ### 3) Check namespaces on the Linux nodes
 
-docker exec -it clab-vlan-switching-evpn-nutanix bash
-ip netns list
+docker exec -it nutanix ip netns list
 
-docker exec -it clab-vlan-switching-evpn-firewall-a bash
-ip netns list
+docker exec -it firewall-a ip netns list
 
-docker exec -it clab-vlan-switching-evpn-firewall-b bash
-ip netns list
+docker exec -it firewall-b ip netns list
 
 ### 4) Verification (expected behavior)
-docker exec -it clab-vlan-switching-evpn-nutanix bash
-
-ip netns exec ns101 ping -c 3 10.10.10.101
-ip netns exec ns102 ping -c 3 10.10.10.102
+# should succeed
+docker exec -it nutanix ip netns exec ns101 ping -c 3 10.10.10.101
+docker exec -it nutanix ip netns exec ns102 ping -c 3 10.10.10.102
 
 ### 5) Reachability that SHOULD NOT work
-From nutanix:
+# From nutanix:
+# ns101 should NOT reach firewall-b and ns102 should NOT reach firewall-a
+# should fail
+docker exec -it nutanix ip netns exec ns101 ping -c 3 10.10.10.102
+docker exec -it nutanix ip netns exec ns102 ping -c 3 10.10.10.101
 
-ns101 should NOT reach firewall-b
-ns102 should NOT reach firewall-a
-ns101 should NOT reach ns102 (they are in different VLANs/services)
+# ns101 should NOT reach ns102 (they are in different VLANs/services)
+# should fail
+docker exec -it nutanix ip netns exec ns101 ping -c 3 10.10.10.202
+docker exec -it nutanix ip netns exec ns102 ping -c 3 10.10.10.201
 
-### Example
-ip netns exec ns101 ping -c 3 10.10.10.102   # should fail
-ip netns exec ns102 ping -c 3 10.10.10.101   # should fail
-
-ip netns exec ns101 ping -c 3 10.10.10.202   # should fail (ns102 IP)
-ip netns exec ns102 ping -c 3 10.10.10.201   # should fail (ns101 IP)
+# ns10 in firewall-a shouldNOT reach ns10 in feirewall-b and vice versa
+# should fail
+docker exec -it firewall-a ip netns exec ns10 ping -c 3 10.10.10.102
+docker exec -it firewall-b ip netns exec ns10 ping -c 3 10.10.10.101
 
 ### 6) Tear down
 containerlab destroy --topo lab_vlan_switching_evpn.clab.yml
