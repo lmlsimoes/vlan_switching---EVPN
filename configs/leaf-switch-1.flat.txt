@@ -120,6 +120,3 @@ set / network-instance l2_cliente2 interface irb2.1
 set / network-instance l3_client2 type ip-vrf
 set / network-instance l3_client2 admin-state enable
 set / network-instance l3_client2 interface irb2.1
-
-
-
